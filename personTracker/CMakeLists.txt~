@@ -1,0 +1,54 @@
+cmake_minimum_required(VERSION 2.8.3)
+project(personTracker)
+
+## Find catkin macros and libraries
+## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
+## is used, also find other catkin packages
+find_package(orocos_kdl REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+  std_msgs
+  geometry_msgs
+  roscpp
+  roslib
+  tf
+)
+
+# Find OpenNI
+find_package(PkgConfig)
+pkg_check_modules(OpenNI REQUIRED libopenni)
+
+# Find Nite
+find_path(Nite_INCLUDEDIR
+	  NAMES XnVNite.h
+	  HINTS /usr/include/nite /usr/local/include/nite)
+find_library(Nite_LIBRARY
+	     NAMES XnVNite_1_3_1
+	     HINTS /usr/lib /usr/local/lib
+	     PATH_SUFFIXES lib) 
+
+catkin_package()
+
+###########
+## Build ##
+###########
+
+## Specify additional locations of header files
+## Your package locations should be listed before other locations
+# include_directories(include)
+include_directories(${catkin_INCLUDEDIR}
+		    ${OpenNI_INCLUDEDIR}
+		    ${Nite_INCLUDEDIR}
+		    ${orocos_kdl_INCLUDE_DIRS})
+link_directories(${catkin_LIBRARY_DIRS})
+link_directories(${orocos_kdl_LIBRARY_DIRS})
+
+## Declare a cpp executable
+add_executable(personTracker_node src/personTracker_node.cpp)
+
+add_dependencies(personTracker_node geometry_msgs_gencpp)
+
+target_link_libraries(personTracker_node ${catkin_LIBRARIES}
+				     ${OpenNI_LIBRARIES}
+				     ${Nite_LIBRARY}
+				     ${orocos_kdl_LIBRARIES})
+
