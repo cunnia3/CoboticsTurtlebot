@@ -1,78 +1,86 @@
-#!/usr/bin/env python  
-import roslib
+#!/usr/bin/env python
+
+#Author: Andrew Cunningham
+
 import rospy
 import math
 import tf
 import geometry_msgs.msg
 
-if __name__ == '__main__':
-    rospy.init_node('tf_personFollower')
+#initialize velocities to 0
+global currentAngularV
+global currentLinearV
+currentAngularV = 0
+currentLinearV = 0
 
-    listener = tf.TransformListener()
+global lastX
+lastX = 0
 
+def callback(data):
+    global currentLinearV
+    global currentAngularV
+    global turtle_vel
+    global lastX
+
+    #calculate angular displacement
+    angularDisplacement = math.atan2(data.x, data.y)
+
+    #calculate distance to person
+    dist = math.sqrt(data.x ** 2 + data.y ** 2)
+    distFromDesired = dist - .35 #.4 is set according to user preference
+ 
+    #calculate velocity goals
+    linearGoal = 3 * distFromDesired
+    angularGoal = 2 * angularDisplacement
+	
+    if data.x == lastX or (data.y < 0.01 and data.x < 0.01):
+	linearGoal = 0
+	angularGoal = 0
+
+    #used to make sure that repeat CoM's aren't used to drive the robot
+    lastX = data.x
+    #bound linear and angular goals
+    if linearGoal > .7:
+        linearGoal = .7
+
+    if linearGoal < -.5:
+        linearGoal = -.5
+
+    if angularGoal > .7:
+        angularGoal = .7
+        linearGoal = 0
+
+    if angularGoal < -.7:
+        angularGoal = -.7
+        linearGoal = 0
+
+    #take current velocities into account to allow for smooth transistions
+    if currentLinearV < linearGoal:
+        currentLinearV += .02
+
+    else:
+        currentLinearV -= .02
+
+    if currentAngularV < angularGoal:
+        currentAngularV += .1
+
+    else:
+        currentAngularV -= .05
+
+    cmd = geometry_msgs.msg.Twist()
+    cmd.linear.x = currentLinearV
+    cmd.angular.z = currentAngularV
+    turtle_vel.publish(cmd)
+
+
+def listener():
+    rospy.init_node('personFollower', anonymous=True)
+    global turtle_vel
     turtle_vel = rospy.Publisher('/cmd_vel_mux/input/teleop', geometry_msgs.msg.Twist)
+    rospy.Subscriber("personCoM", geometry_msgs.msg.Pose2D, callback)
 
-    rate = rospy.Rate(10.0)
-    nConformations = 0 #number of times the body part has been identified (used to ramp speed up and down)
-    transLast = 0
-    lastLinear = 0
-    lastAngular = 0
-    while not rospy.is_shutdown():
-        try:
-            (trans,rot) = listener.lookupTransform('/openni_depth_frame', '/torso_1',  rospy.Time(0))
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
- 	    cmd = geometry_msgs.msg.Twist()
-            cmd.linear.x = 0
-            cmd.angular.z = 0
-            turtle_vel.publish(cmd)
-            continue
-	
-	if transLast == trans:
-            cmd = geometry_msgs.msg.Twist()
-            cmd.linear.x = lastLinear / 1.4
-            cmd.angular.z = 0
-            turtle_vel.publish(cmd)
-	    lastLinear = lastLinear / 1.4
-            continue
 
-        angularGoal= 4 * math.atan2(trans[1], trans[0])
-	dist = math.sqrt(trans[0] ** 2 + trans[1] ** 2)
-	distFromDesired = dist - 2
-	linearGoal = .5 * distFromDesired
-
-	#bound linear and angular goals
-	if linearGoal > .3:
-           linearGoal = .3
-
-	if linearGoal < -.3:
-	   linearGoal = -.3	    
-
-	if angularGoal > .5:
-	   angularGoal = .5
-
-	if angularGoal < -.5:
-	   angularGoal = -.5
-
-	
-	#ramp up angular and linear speeds
-	if lastLinear < linearGoal:
-	   lastLinear += .02
-
-	else:
-	   lastLinear -= .02
-
-	if lastAngular < angularGoal:
-	   lastAngular += .1
-
-	else:
-	   lastAngular += -.1
-
-        #send message
-	#rospy.loginfo("linearGoal = %f, angularGoal = %f,  dist = %f", linearGoal, angularGoal, dist)
-	rospy.loginfo("trans[1] = %f, trans[0] = %f", trans[1], trans[0])        
-	cmd = geometry_msgs.msg.Twist()
-        cmd.linear.x = lastLinear
-        cmd.angular.z = lastAngular
-        turtle_vel.publish(cmd)
-	transLast = trans
-        rate.sleep()
+    rospy.spin()
+        
+if __name__ == '__main__':
+    listener()
