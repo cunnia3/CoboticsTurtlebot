@@ -9,6 +9,9 @@
 #include <XnCodecIDs.h>
 #include <XnCppWrapper.h>
 
+#include <cmath>
+#include <vector>
+
 #include "geometry_msgs/Pose2D.h"
 
 using std::string;
@@ -194,16 +197,34 @@ int main(int argc, char **argv) {
         string frame_id("openni_depth_frame");
         pnh.getParam("camera_frame_id", frame_id);
 	geometry_msgs::Pose2D msg;       
+	//track the last x for each user to ensure that the recognition is not "stuck"
+	std::vector <double> lastX;
 	while (ros::ok()) {
-	      	XnVector3D centerOfMass;
-		g_UserGenerator.GetCoM(1, centerOfMass);
-		ROS_INFO("Center of mass x: %f y: %f", centerOfMass.X/-1000, centerOfMass.Y/1000);
+		XnVector3D centerOfMass;
+		int userToTrack = 1;
+
+
+		//set the size of the vector to match the number of users
+		while(lastX.size() < g_UserGenerator.GetNumberOfUsers())
+			lastX.push_back(0);
+
+
+		for(int i=1;i<g_UserGenerator.GetNumberOfUsers(); i++){
+			g_UserGenerator.GetCoM(i, centerOfMass);
+			if(abs(centerOfMass.X) > 0.001 && abs(centerOfMass.Y) > 0.001 && lastX[i] != centerOfMass.X)
+				lastX[i] = centerOfMass.X;
+				userToTrack = i;
+	 			break;
+		}
+
+		g_UserGenerator.GetCoM(userToTrack, centerOfMass);
+		ROS_INFO("#u: %d, u: %d, Center of mass x: %f y: %f", g_UserGenerator.GetNumberOfUsers(), userToTrack, centerOfMass.X/-1000, centerOfMass.Y/1000);
 		msg.x = centerOfMass.X/-1000;
 		msg.y = centerOfMass.Y/1000;
 		msg.theta = 0;
 		CoM_pub.publish(msg);		
 		g_Context.WaitAndUpdateAll();
-		publishTransforms(frame_id);
+		//publishTransforms(frame_id);
 		r.sleep();
 	}
 
